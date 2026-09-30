@@ -193,8 +193,8 @@ def main():
                 publish_photo(urls[0], caption)
             elif tipo == "carrusel":
                 publish_carousel(urls, caption)
-            elif tipo in ("reel", "video"):
-                publish_video(urls[0], caption, as_reel=(tipo == "reel"))
+elif tipo in ("reel", "video"):
+       publish_video(urls[0], caption, as_reel=True)
             else:
                 print(f"[WARN] {row_id}: tipo desconocido '{tipo}', se salta.")
                 continue
