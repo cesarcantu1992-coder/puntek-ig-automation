@@ -1,0 +1,39 @@
+name: Publicar contenido Puntek en Instagram
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # corre cada 5 minutos, todo el día, para siempre
+  workflow_dispatch: {}       # permite correrlo manualmente desde la pestaña "Actions" para pruebas
+
+permissions:
+  contents: write   # necesario para poder guardar el estado de publicaciones ya hechas
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar publicador
+        env:
+          SHEET_CSV_URL: ${{ secrets.SHEET_CSV_URL }}
+          IG_BUSINESS_ACCOUNT_ID: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: python scripts/publish_calendar.py
+
+      - name: Guardar estado si cambió
+        run: |
+          if ! git diff --quiet state/published_state.json; then
+            git config user.name "puntek-bot"
+            git config user.email "actions@github.com"
+            git add state/published_state.json
+            git commit -m "Actualiza estado de publicaciones"
+            git push
+          fi
