@@ -73,13 +73,21 @@ def parse_dt(s):
     return datetime.fromisoformat(s.strip())
 
 
-def graph_post(path, **params):
+def graph_post(path, retries=3, **params):
     params["access_token"] = ACCESS_TOKEN
-    r = requests.post(f"{GRAPH}/{path}", data=params, timeout=60)
-    data = r.json()
-    if "error" in data:
-        raise RuntimeError(f"Graph API error en POST {path}: {data['error']}")
-    return data
+    last_error = None
+    for attempt in range(retries):
+        r = requests.post(f"{GRAPH}/{path}", data=params, timeout=60)
+        data = r.json()
+        if "error" not in data:
+            return data
+        last_error = data["error"]
+        if last_error.get("is_transient") and attempt < retries - 1:
+            print(f"[RETRY] {path}: error transitorio, reintentando en 15s — {last_error}")
+            time.sleep(15)
+            continue
+        break
+    raise RuntimeError(f"Graph API error en POST {path}: {last_error}")
 
 
 def graph_get(path, **params):
@@ -91,7 +99,10 @@ def graph_get(path, **params):
     return data
 
 
-def wait_for_container(container_id, max_wait=300, interval=10):
+def wait_for_container(container_id, max_wait=180, interval=5):
+    """Espera a que Meta termine de procesar un contenedor de media
+    (foto, carrusel o video) antes de publicarlo. Sin esto, publicar
+    demasiado rápido produce 'Media ID is not available'."""
     waited = 0
     while waited < max_wait:
         info = graph_get(container_id, fields="status_code")
@@ -108,6 +119,7 @@ def wait_for_container(container_id, max_wait=300, interval=10):
 def publish_photo(media_url, caption):
     container = graph_post(f"{IG_USER_ID}/media", image_url=media_url, caption=caption)
     creation_id = container["id"]
+    wait_for_container(creation_id)
     return graph_post(f"{IG_USER_ID}/media_publish", creation_id=creation_id)
 
 
@@ -123,6 +135,7 @@ def publish_carousel(media_urls, caption):
         caption=caption,
     )
     creation_id = container["id"]
+    wait_for_container(creation_id)
     return graph_post(f"{IG_USER_ID}/media_publish", creation_id=creation_id)
 
 
@@ -135,7 +148,7 @@ def publish_video(video_url, caption, as_reel=True):
         caption=caption,
     )
     creation_id = container["id"]
-    wait_for_container(creation_id)
+    wait_for_container(creation_id, max_wait=300, interval=10)
     return graph_post(f"{IG_USER_ID}/media_publish", creation_id=creation_id)
 
 
